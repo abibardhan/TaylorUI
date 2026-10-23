@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taylor Diagram Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1d2330;--mu:#667;--bd:#d9dde5;--ac:#2f6fed}
+@media(prefers-color-scheme:dark){:root{--bg:#171a20;--card:#222630;--tx:#e8eaf0;--mu:#99a;--bd:#3a4050}}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{padding:12px 18px;border-bottom:1px solid var(--bd);background:var(--card);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+h1{font-size:17px;margin:0}
+main{display:grid;grid-template-columns:350px 370px minmax(0,1fr);gap:14px;padding:14px;align-items:stretch}
+.plotcard{display:flex;flex-direction:column}.plotcard #stage{flex:1}
+main>.card{margin-bottom:0}.wide{grid-column:1/-1}
+@media(max-width:1200px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:12px}
+.card h2{font-size:13px;margin:0 0 8px;text-transform:uppercase;letter-spacing:.05em;color:var(--mu)}
+button,select,input{font:inherit;color:var(--tx)}
+button{background:var(--ac);color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
+button.sec{background:transparent;color:var(--tx);border:1px solid var(--bd)}
+input[type=text],input[type=number],select{background:var(--card);border:1px solid var(--bd);border-radius:5px;padding:4px 6px;width:100%}
+input[type=color]{width:34px;height:28px;padding:0;border:1px solid var(--bd);border-radius:5px;background:none}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px}
+.row label{display:flex;flex-direction:column;font-size:12px;color:var(--mu);gap:2px}
+.row label.ck{flex-direction:row;align-items:center;gap:6px;color:var(--tx)}
+.m{display:grid;grid-template-columns:20px 1fr 36px 80px 54px;gap:5px;align-items:center;margin-bottom:5px}
+.mh{font-size:11px;color:var(--mu)}
+#stage{background:#fff;border-radius:8px;overflow:auto;text-align:left}
+#dpimenu{position:absolute;top:100%;left:0;margin-top:4px;background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:4px;display:flex;flex-direction:column;gap:4px;z-index:5;min-width:110px}
+#dpimenu[hidden]{display:none}#leg{touch-action:none}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:20;padding:16px}
+#modal[hidden]{display:none}.mbox{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:16px;max-width:760px;width:100%;max-height:85vh;display:flex;flex-direction:column}
+#stage svg{max-width:100%;height:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:4px 8px;border-bottom:1px solid var(--bd);text-align:right}th:first-child,td:first-child{text-align:left}
+#msg{color:#c0392b;font-size:13px}
+</style></head><body>
+<header><h1>Taylor Diagram Generator</h1>
+<span id="msg" style="flex:1;min-width:200px">Upload an Excel file: column 1 = actual values, columns 2+ = model predictions (row 1 = names).</span>
+<span style="color:var(--mu);font-size:13px;margin-left:auto">Developed by Dr. Abidhan Bardhan (E-mail: <a href="mailto:abidhan@nitp.ac.in" style="color:inherit">abidhan@nitp.ac.in</a>)</span></header>
+<main>
+ <div class="card"><h2>Models</h2>
+  <div class="m mh"><span></span><span>Name</span><span>Color</span><span>Marker</span><span>Size</span></div>
+  <div id="models"><div class="mh">No data loaded yet.</div></div>
+  <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+   <button class="sec" id="applyAll">Apply size to all</button><button class="sec" id="resetCol">Reset colors</button></div>
+ </div>
+ <div class="card"><h2>Plot settings</h2>
+  <div class="row"><label>Title<input type="text" id="title" value=""></label><label>Legend position
+   <select id="legpos"><option value="tr">Top right</option><option value="br">Bottom right</option><option value="out">Outside right</option><option value="none">Hidden</option></select></label></div>
+  <div class="row"><label>X-axis label<input type="text" id="xlab" value="Standard deviation"></label><label>Y-axis label<input type="text" id="ylab" value="Standard deviation"></label></div>
+  <div class="row"><label>Reference label<input type="text" id="reflab" value="Ref"></label><label>Correlation label<input type="text" id="corlab" value="Correlation"></label></div>
+  <div class="row"><label>Default marker size<input type="number" id="msize" value="7" min="2" max="30"></label><label>Axis max (blank = auto)<input type="number" id="axmax" step="0.1" placeholder="auto"></label></div>
+  <div class="row"><label>Font size<input type="number" id="fs" value="13" min="8" max="30"></label><label>Legend font size<input type="number" id="lfs" value="13" min="8" max="30"></label></div>
+  <div class="row"><label>Figure width (px)<input type="number" id="W" value="640" min="300" max="2000"></label><label>Figure height (px)<input type="number" id="H" value="560" min="300" max="2000"></label></div>
+  <div class="row"><label>Left margin (mm)<input type="number" id="lmm" value="2" min="0" max="60" step="0.5"></label></div>
+  <div class="row"><label>SD arc step<input type="number" id="sdstep" value="0.25" step="0.05" min="0.05"></label><label>RMSD arc step<input type="number" id="rmstep" value="0.25" step="0.05" min="0.05"></label></div>
+  <div class="row"><label>Correlation ray color<input type="color" id="ccol" value="#7f9fd0"></label><label>RMSD arc color<input type="color" id="rcol" value="#6fa8dc"></label></div>
+  <div class="row"><label class="ck"><input type="checkbox" id="norm" checked>Normalize (ref SD = 1)</label><label class="ck"><input type="checkbox" id="showrms" checked>Show RMSD arcs</label>
+   <label class="ck"><input type="checkbox" id="showsd" checked>Show SD arcs</label><label class="ck"><input type="checkbox" id="showcor" checked>Show correlation rays</label>
+   <label class="ck"><input type="checkbox" id="showrefarc" checked>Ref SD dashed arc</label><label class="ck"><input type="checkbox" id="sample" checked>Sample SD (n−1)</label>
+   <label class="ck"><input type="checkbox" id="legbox">Legend box</label></div>
+ </div>
+ <div class="card plotcard"><div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+  <button id="pick">Choose file</button><input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+  <select id="sheet" style="width:auto;display:none"></select>
+  <div style="position:relative"><button id="dlpng">Download PNG &#9662;</button>
+   <div id="dpimenu" hidden><button class="sec" data-dpi="300">300 dpi</button><button class="sec" data-dpi="600">600 dpi</button><button class="sec" data-dpi="900">900 dpi</button><button class="sec" data-dpi="1200">1200 dpi</button></div></div>
+  <button id="statbtn">Statistics</button></div>
+  <div id="stage"></div></div>
+ <div id="modal" hidden><div class="mbox"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px"><h2 style="margin:0">Statistics</h2>
+  <div style="display:flex;gap:8px"><button id="dlcsv">Download CSV</button><button class="sec" id="closem">Close</button></div></div>
+  <div id="stats" style="overflow:auto"></div></div></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const PAL=["#2ecc40","#0074d9","#111111","#ffdc00","#00d4e0","#ff4136","#b10dc9","#ff851b","#7fdbff","#8b5a2b"];
+const SHAPES=["square","circle","triangle","diamond","cross","star"];
+let data=null, models=[], legOff={x:0,y:0}, lastLP=null;
+
+/* ---------- loading ---------- */
+$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+ r.onload=ev=>{try{window.wb=XLSX.read(ev.target.result,{type:'array'});
+  const s=$('sheet');s.innerHTML=wb.SheetNames.map(n=>`<option>${n}</option>`).join('');
+  s.style.display=wb.SheetNames.length>1?'':'none';load(wb.SheetNames[0]);}catch(err){msg(err.message)}};
+ r.readAsArrayBuffer(f)};
+$('sheet').onchange=e=>load(e.target.value);
+function msg(t){$('msg').textContent=t}
+function load(name){
+ const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:null});
+ if(!rows.length)return msg('Empty sheet');
+ let hdr=rows[0],start=1;
+ if(typeof rows[0][0]==='number'){hdr=rows[0].map((_,i)=>i?'Model '+i:'Actual');start=0}
+ const n=hdr.length;if(n<2)return msg('Need at least 2 columns');
+ const cols=Array.from({length:n},()=>[]);
+ for(let i=start;i<rows.length;i++)for(let j=0;j<n;j++)cols[j].push(typeof rows[i][j]==='number'?rows[i][j]:NaN);
+ data={ref:cols[0],preds:cols.slice(1)};
+ models=data.preds.map((_,i)=>({name:String(hdr[i+1]??'Model '+(i+1)),color:PAL[i%PAL.length],shape:'square',size:null,show:true}));
+ msg(`Loaded ${cols[0].length} rows, ${n-1} models from "${name}".`);buildUI();draw();
+}
+function buildUI(){
+ $('models').innerHTML=models.map((m,i)=>`<div class="m">
+  <input type="checkbox" data-i="${i}" data-k="show" ${m.show?'checked':''}>
+  <input type="text" data-i="${i}" data-k="name" value="${m.name.replace(/"/g,'&quot;')}">
+  <input type="color" data-i="${i}" data-k="color" value="${m.color}">
+  <select data-i="${i}" data-k="shape">${SHAPES.map(s=>`<option ${s==m.shape?'selected':''}>${s}</option>`).join('')}</select>
+  <input type="number" data-i="${i}" data-k="size" min="2" max="40" placeholder="${$('msize').value}" value="${m.size??''}"></div>`).join('');
+ $('models').querySelectorAll('[data-k]').forEach(el=>el.oninput=el.onchange=()=>{
+  const m=models[el.dataset.i],k=el.dataset.k;
+  m[k]=k==='show'?el.checked:k==='size'?(el.value===''?null:+el.value):el.value;draw()});
+}
+$('applyAll').onclick=()=>{models.forEach(m=>m.size=null);buildUI();draw()};
+$('resetCol').onclick=()=>{models.forEach((m,i)=>m.color=PAL[i%PAL.length]);buildUI();draw()};
+document.querySelectorAll('.card input[id]:not(#file),.card select[id]:not(#sheet)').forEach(el=>{if(!el.dataset.k)el.oninput=el.onchange=draw});
+$('msize').addEventListener('input',()=>{if(data)buildUI()});
+
+/* ---------- stats ---------- */
+function stats(a,b,sample){
+ let x=[],y=[];for(let i=0;i<a.length;i++)if(isFinite(a[i])&&isFinite(b[i])){x.push(a[i]);y.push(b[i])}
+ const n=x.length,mx=x.reduce((s,v)=>s+v,0)/n,my=y.reduce((s,v)=>s+v,0)/n;
+ let sxx=0,syy=0,sxy=0;for(let i=0;i<n;i++){sxx+=(x[i]-mx)**2;syy+=(y[i]-my)**2;sxy+=(x[i]-mx)*(y[i]-my)}
+ const d=sample?n-1:n;return{n,sdx:Math.sqrt(sxx/d),sdy:Math.sqrt(syy/d),r:sxy/Math.sqrt(sxx*syy)};
+}
+
+/* ---------- drawing ---------- */
+function marker(s,x,y,r,col){
+ const st=`fill="${col}" stroke="#000" stroke-width="0.6"`;
+ switch(s){
+  case'circle':return`<circle cx="${x}" cy="${y}" r="${r}" ${st}/>`;
+  case'triangle':return`<polygon points="${x},${y-r*1.15} ${x+r*1.05},${y+r*.8} ${x-r*1.05},${y+r*.8}" ${st}/>`;
+  case'diamond':return`<polygon points="${x},${y-r*1.3} ${x+r*1.3},${y} ${x},${y+r*1.3} ${x-r*1.3},${y}" ${st}/>`;
+  case'cross':return`<path d="M${x-r},${y-r}L${x+r},${y+r}M${x-r},${y+r}L${x+r},${y-r}" stroke="${col}" stroke-width="${Math.max(2,r/2.5)}" fill="none"/>`;
+  case'star':{let p=[];for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5,q=i%2?r*.5:r*1.4;p.push((x+q*Math.cos(a)).toFixed(1)+','+(y+q*Math.sin(a)).toFixed(1))}return`<polygon points="${p.join(' ')}" ${st}/>`}
+  default:return`<rect x="${x-r}" y="${y-r}" width="${2*r}" height="${2*r}" ${st}/>`;
+ }}
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+
+function draw(){
+ if(!data){$('stage').innerHTML='';return}
+ const W=+$('W').value,H=+$('H').value,fs=+$('fs').value,lfs=+$('lfs').value,norm=$('norm').checked,smp=$('sample').checked;
+ const dm=+$('msize').value;
+ const res=data.preds.map(p=>stats(data.ref,p,smp));
+ const refSD=norm?1:res[0].sdx;
+ const pts=res.map((s,i)=>({sd:norm?s.sdy/s.sdx:s.sdy,r:Math.max(Math.min(s.r,1),0),raw:s,i}));
+ const vis=pts.filter(p=>models[p.i].show);
+ let R=+$('axmax').value;
+ if(!R){const mx=Math.max(refSD,...vis.map(p=>p.sd));R=Math.max(norm?1.5:1.25*refSD,Math.ceil(mx*1.08*4)/4)}
+ const legW=$('legpos').value==='out'?170:0;
+ const mL=Math.round(fs*3.2+(+$('lmm').value||0)*96/25.4),mB=Math.round(fs*3.6),mT=$('title').value?fs*3:fs*2.4,mR=fs*3+legW;
+ const S=Math.min((W-mL-mR),(H-mT-mB))/R,ox=mL,oy=H-mB,P=(x,y)=>[ox+x*S,oy-y*S];
+ const gc='#9aa5b1',cc=$('ccol').value,rc=$('rcol').value,fam="Arial, Helvetica, sans-serif";
+ let o=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${fam}" font-size="${fs}"><rect width="${W}" height="${H}" fill="#fff"/>
+ <defs><clipPath id="cp"><path d="M${ox},${oy}L${ox+R*S},${oy}A${R*S},${R*S} 0 0 0 ${ox},${oy-R*S}Z"/></clipPath></defs>`;
+ const f=v=>+v.toFixed(2);
+ // RMSD arcs (centred on reference)
+ if($('showrms').checked){const st=+$('rmstep').value||.25;o+=`<g clip-path="url(#cp)" fill="none" stroke="${rc}" stroke-width="1">`;
+  for(let d=st;d<R+refSD;d+=st){const[cx,cy]=P(refSD,0);o+=`<circle cx="${cx}" cy="${cy}" r="${d*S}"/>`;}o+='</g>';
+  o+=`<g font-size="${fs-3}" fill="${rc}">`;for(let d=st;d<R+refSD;d+=st){const xx=refSD-d;if(xx>=0.02&&xx<=R*.98)o+=`<text x="${P(xx,0)[0]}" y="${oy-3}" text-anchor="middle">${f(d)}</text>`}o+='</g>'}
+ // SD arcs
+ if($('showsd').checked){const st=+$('sdstep').value||.25;o+=`<g fill="none" stroke="${gc}" stroke-dasharray="1 3" stroke-width="1">`;
+  for(let d=st;d<R-1e-6;d+=st){o+=`<path d="M${ox+d*S},${oy}A${d*S},${d*S} 0 0 0 ${ox},${oy-d*S}"/>`}o+='</g>'}
+ // correlation rays
+ const cors=[0,.1,.2,.3,.4,.5,.6,.7,.8,.9,.95,.99,1];
+ o+=`<g stroke="${cc}" stroke-width="1" ${$('showcor').checked?'':'display="none"'}>`;
+ cors.forEach(c=>{if(c>0&&c<1){const a=Math.acos(c);const[x,y]=P(R*Math.cos(a),R*Math.sin(a));o+=`<line x1="${ox}" y1="${oy}" x2="${x}" y2="${y}" stroke-dasharray="${c==.95||c==.99?'':'0'}"/>`}});o+='</g>';
+ // ref SD arc
+ if($('showrefarc').checked)o+=`<path d="M${ox+refSD*S},${oy}A${refSD*S},${refSD*S} 0 0 0 ${ox},${oy-refSD*S}" fill="none" stroke="#333" stroke-dasharray="5 4"/>`;
+ // axes + outer arc
+ o+=`<path d="M${ox},${oy-R*S}L${ox},${oy}L${ox+R*S},${oy}" fill="none" stroke="#000" stroke-width="1.3"/>
+ <path d="M${ox+R*S},${oy}A${R*S},${R*S} 0 0 0 ${ox},${oy-R*S}" fill="none" stroke="#000" stroke-width="1.3"/>`;
+ // ticks
+ const ts=R>2?.5:.25;for(let v=0;v<=R+1e-9;v+=ts){const t=f(v);const[x]=P(v,0),[,y]=P(0,v);
+  o+=`<line x1="${x}" y1="${oy}" x2="${x}" y2="${oy+5}" stroke="#000"/><text x="${x}" y="${oy+fs+6}" text-anchor="middle">${t}</text>
+  <line x1="${ox}" y1="${y}" x2="${ox-5}" y2="${y}" stroke="#000"/><text x="${ox-6}" y="${y+fs/3}" text-anchor="end">${t}</text>`}
+ // correlation labels
+ cors.forEach(c=>{const a=Math.acos(c),[x,y]=P(R*1.03*Math.cos(a),R*1.03*Math.sin(a));
+  const [tx,ty]=P(R*Math.cos(a),R*Math.sin(a));
+  o+=`<line x1="${tx}" y1="${ty}" x2="${tx+4*Math.cos(a)}" y2="${ty-4*Math.sin(a)}" stroke="#000"/><text x="${x+3}" y="${y-2}" font-size="${fs-2}" text-anchor="start">${c}</text>`});
+ { const a=Math.PI/4,[x,y]=P(R*1.13*Math.cos(a),R*1.13*Math.sin(a));
+  o+=`<text transform="translate(${x+fs*.6},${y-fs*.6}) rotate(45)" text-anchor="middle">${esc($('corlab').value)}</text>`}
+ o+=`<text x="${ox+R*S/2}" y="${H-fs*.6}" text-anchor="middle">${esc($('xlab').value)}</text>
+ <text transform="translate(${fs*.9},${oy-R*S/2}) rotate(-90)" text-anchor="middle">${esc($('ylab').value)}</text>`;
+ if($('title').value)o+=`<text x="${W/2}" y="${fs*1.6}" text-anchor="middle" font-size="${fs+3}" font-weight="bold">${esc($('title').value)}</text>`;
+ // reference marker
+ const[rx,ry]=P(refSD,0);const rr=dm*.9;
+ o+=`<g stroke="#000" fill="none"><circle cx="${rx}" cy="${ry}" r="${rr}"/><path d="M${rx-rr},${ry}L${rx+rr},${ry}M${rx},${ry-rr}L${rx},${ry+rr}"/></g>`;
+ // model points
+ vis.forEach(p=>{const m=models[p.i],[x,y]=P(p.sd*p.r,p.sd*Math.sqrt(1-p.r*p.r));o+=marker(m.shape,x,y,(m.size??dm)/2+1,m.color)});
+ // legend
+ const lp=$('legpos').value;
+ if(lp!=='none'){const items=vis.map(p=>({n:models[p.i].name,m:models[p.i]}));const lh=lfs+8,lw=Math.max(60,Math.max(...vis.map(p=>models[p.i].name.length),$('reflab').value.length)*lfs*.6+34);
+  if(lastLP!==lp){legOff={x:0,y:0};lastLP=lp}
+  const ly=lp==='br'?oy-lh*(items.length+1)-10:(lp==='out'?mT:mT-4);
+  const lx=W-lw+8;const x0=lp==='out'?lx:Math.min(ox+R*S*.78,W-lw+8);
+  o+=`<g id="leg" transform="translate(${legOff.x},${legOff.y})" style="cursor:move"><rect x="${x0-6}" y="${ly}" width="${lw}" height="${(items.length+1)*lh}" fill="#fff" fill-opacity="${$('legbox').checked?.9:0}" stroke="${$('legbox').checked?'#000':'none'}"/>`;
+  items.forEach((it,i)=>{const y=ly+i*lh+lh/2;o+=marker(it.m.shape,x0+8,y,Math.min((it.m.size??dm)/2+1,lh/2),it.m.color)+`<text x="${x0+24}" y="${y+lfs/3}" font-size="${lfs}">${esc(it.n)}</text>`});
+  const y=ly+items.length*lh+lh/2;o+=`<g stroke="#000" fill="none"><circle cx="${x0+8}" cy="${y}" r="5"/><path d="M${x0+3},${y}h10M${x0+8},${y-5}v10"/></g><text x="${x0+24}" y="${y+lfs/3}" font-size="${lfs}">${esc($('reflab').value)}</text></g>`}
+ o+='</svg>';$('stage').innerHTML=o;
+ const lg=$('leg');if(lg)lg.onpointerdown=e=>{const sv=$('stage').querySelector('svg'),k=sv.width.baseVal.value/sv.getBoundingClientRect().width,sx=e.clientX,sy=e.clientY,a=legOff.x,b=legOff.y;
+  lg.setPointerCapture(e.pointerId);lg.onpointermove=ev=>{legOff={x:a+(ev.clientX-sx)*k,y:b+(ev.clientY-sy)*k};lg.setAttribute('transform',`translate(${legOff.x},${legOff.y})`)};lg.onpointerup=()=>{lg.onpointermove=null}};
+
+ $('stats').innerHTML=`<table><tr><th>Model</th><th>R</th><th>SD</th><th>${norm?'SD ratio':'—'}</th><th>CRMSD</th></tr>`+
+  `<tr><td>${esc($('reflab').value)}</td><td>1</td><td>${res[0].sdx.toFixed(4)}</td><td>${norm?'1':'—'}</td><td>0</td></tr>`+
+  res.map((s,i)=>{const crmsd=Math.sqrt(Math.max(0,s.sdx**2+s.sdy**2-2*s.sdx*s.sdy*s.r));
+   return`<tr><td>${esc(models[i].name)}</td><td>${s.r.toFixed(4)}</td><td>${s.sdy.toFixed(4)}</td><td>${norm?(s.sdy/s.sdx).toFixed(4):'—'}</td><td>${crmsd.toFixed(4)}</td></tr>`}).join('')+'</table>';
+ if(res.some(s=>s.r<0))msg('Warning: some correlations are negative; they are plotted at r = 0 (positive-correlation diagram).');
+}
+
+/* ---------- export ---------- */
+function dl(href,name){const a=document.createElement('a');a.href=href;a.download=name;a.click()}
+$('pick').onclick=()=>$('file').click();
+$('statbtn').onclick=()=>{if(!data)return msg('Upload a file first.');$('modal').hidden=false};
+$('closem').onclick=()=>$('modal').hidden=true;
+$('modal').onclick=e=>{if(e.target.id==='modal')$('modal').hidden=true};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')$('modal').hidden=true});
+$('dlcsv').onclick=()=>{const t=$('stats').querySelector('table');if(!t)return;
+ const csv=[...t.rows].map(r=>[...r.cells].map(c=>'"'+c.textContent.replace(/"/g,'""')+'"').join(',')).join('\r\n');
+ dl(URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'})),'taylor_statistics.csv')};
+$('dlpng').onclick=e=>{e.stopPropagation();if(data)$('dpimenu').hidden=!$('dpimenu').hidden};
+document.addEventListener('click',()=>$('dpimenu').hidden=true);
+$('dpimenu').querySelectorAll('button').forEach(b=>b.onclick=()=>{$('dpimenu').hidden=true;savePNG(+b.dataset.dpi)});
+function savePNG(dpi){const svg=$('stage').querySelector('svg'),sc=dpi/96,img=new Image();
+ img.onload=()=>{const c=document.createElement('canvas');c.width=Math.round(svg.width.baseVal.value*sc);c.height=Math.round(svg.height.baseVal.value*sc);
+  const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);
+  c.toBlob(bl=>dl(URL.createObjectURL(bl),'taylor_diagram_'+dpi+'dpi.png'),'image/png')};
+ img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(svg))}
+</script></body></html>
